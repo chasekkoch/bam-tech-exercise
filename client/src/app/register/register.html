@@ -1,0 +1,106 @@
+<div class="register-container">
+  <div class="register-card">
+    <h1>Create Account</h1>
+    
+    <form (ngSubmit)="onSubmit()" #registerForm="ngForm">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="firstName">First Name</label>
+          <input
+            type="text"
+            id="firstName"
+            name="firstName"
+            [ngModel]="firstName()"
+            (ngModelChange)="firstName.set($event)"
+            placeholder="First name"
+            [disabled]="loading()"
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="lastName">Last Name</label>
+          <input
+            type="text"
+            id="lastName"
+            name="lastName"
+            [ngModel]="lastName()"
+            (ngModelChange)="lastName.set($event)"
+            placeholder="Last name"
+            [disabled]="loading()"
+          />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email *</label>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          [ngModel]="email()"
+          (ngModelChange)="email.set($event)"
+          required
+          email
+          placeholder="Enter your email"
+          [disabled]="loading()"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password *</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          [ngModel]="password()"
+          (ngModelChange)="password.set($event)"
+          required
+          minlength="8"
+          placeholder="At least 8 characters"
+          [disabled]="loading()"
+        />
+        <small class="form-text">
+          Must be at least 8 characters with uppercase, lowercase, number, and special character
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="confirmPassword">Confirm Password *</label>
+        <input
+          type="password"
+          id="confirmPassword"
+          name="confirmPassword"
+          [ngModel]="confirmPassword()"
+          (ngModelChange)="confirmPassword.set($event)"
+          required
+          minlength="8"
+          placeholder="Re-enter your password"
+          [disabled]="loading()"
+        />
+      </div>
+
+      @if (error()) {
+        <div class="alert alert-danger" role="alert">
+          {{ error() }}
+        </div>
+      }
+
+      <button 
+        type="submit" 
+        class="btn btn-primary btn-block"
+        [disabled]="!registerForm.valid || loading()"
+      >
+        @if (loading()) {
+          <span class="spinner"></span>
+          Creating account...
+        } @else {
+          Create Account
+        }
+      </button>
+    </form>
+
+    <div class="login-link">
+      Already have an account? <a routerLink="/login">Login here</a>
+    </div>
+  </div>
+</div>

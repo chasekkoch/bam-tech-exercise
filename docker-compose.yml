@@ -1,0 +1,129 @@
+services:
+  stargate-api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__StarbaseApiDatabase: Host=stargate-db;Database=starbase;Username=postgres;Password=postgres
+      OpenSearch__Enabled: "true"
+      OpenSearch__Uri: http://stargate-opensearch:9200
+      OpenSearch__IndexPrefix: stargate
+      ASPNETCORE_Kestrel__Certificates__Default__Path: /https/stargateapi.pfx
+      ASPNETCORE_Kestrel__Certificates__Default__Password: devpass
+    volumes:
+      - ./.aspnet/https:/https:ro
+    depends_on:
+      - stargate-db
+      - stargate-opensearch
+    networks:
+      - stargate_net
+
+  stargate-client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "4200:80"
+    depends_on:
+      - stargate-api
+    networks:
+      - stargate_net
+
+  stargate-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: starbase
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - stargate_db:/var/lib/postgresql/data
+    networks:
+      - stargate_net
+
+  stargate-opensearch:
+    image: opensearchproject/opensearch:2.12.0
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "BAMB00ZL3D!afaems"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - stargate_opensearch:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-s", "http://localhost:9200/_cluster/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - stargate_net
+
+  stargate-opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.12.0
+    environment:
+      OPENSEARCH_HOSTS: '["http://stargate-opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports:
+      - "5601:5601"
+    depends_on:
+      - stargate-opensearch
+    networks:
+      - stargate_net
+
+  stargate-opensearch-init:
+    image: alpine:3.20
+    depends_on:
+      - stargate-opensearch-dashboards
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache curl >/dev/null; \
+        for i in $(seq 1 30); do
+          if curl -s http://stargate-opensearch:9200/_cluster/health >/dev/null; then
+            break;
+          fi;
+          sleep 2;
+        done;
+        for i in $(seq 1 30); do
+          if curl -s http://stargate-opensearch-dashboards:5601/api/status >/dev/null; then
+            break;
+          fi;
+          sleep 2;
+        done;
+        for i in $(seq 1 30); do
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "http://stargate-opensearch-dashboards:5601/api/saved_objects/index-pattern/stargate?overwrite=true" \
+            -H 'osd-xsrf: true' \
+            -H 'Content-Type: application/json' \
+            -d '{"attributes":{"title":"stargate-*","timeFieldName":"TimestampUtc"}}'); \
+          if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ]; then
+            break;
+          fi;
+          sleep 2;
+        done; \
+        curl -s -X POST http://stargate-opensearch-dashboards:5601/api/opensearch-dashboards/settings \
+          -H 'osd-xsrf: true' \
+          -H 'Content-Type: application/json' \
+          -d '{"changes":{"defaultIndex":"stargate"}}' || true
+    networks:
+      - stargate_net
+
+volumes:
+  stargate_db:
+  stargate_opensearch:
+
+networks:
+  stargate_net:
+

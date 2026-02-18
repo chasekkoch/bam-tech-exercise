@@ -1,0 +1,221 @@
+<div class="add-duty-page">
+  <nav aria-label="Breadcrumb" class="breadcrumb">
+    <ol>
+      <li><a routerLink="/">Home</a></li>
+      <li><a routerLink="/personnel">Personnel</a></li>
+      @if (name()) {
+        <li><a [routerLink]="['/personnel', name()]">{{ name() }}</a></li>
+      }
+      <li aria-current="page">Add Duty</li>
+    </ol>
+  </nav>
+
+  <div class="form-container">
+    <header class="form-header">
+      <h1>Add Astronaut Duty</h1>
+      <p>Assign a new duty to an astronaut</p>
+    </header>
+
+    @if (success()) {
+      <div class="success-message" role="alert" aria-live="polite">
+        <svg class="success-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+        </svg>
+        <div>
+          <h2>Duty Assignment Created!</h2>
+          <p>Redirecting to personnel record...</p>
+        </div>
+      </div>
+    } @else {
+      <form (submit)="onSubmit($event)" class="duty-form" novalidate>
+        <!-- Name Field -->
+        <div class="form-group">
+          <label for="name" class="form-label">
+            Astronaut Name
+            <span class="required" aria-label="required">*</span>
+          </label>
+          <div class="searchable-dropdown" role="combobox" [attr.aria-expanded]="showDropdown()" aria-haspopup="listbox">
+            <input
+              type="text"
+              id="name"
+              class="form-input"
+              [value]="name()"
+              (input)="name.set($any($event.target).value); onNameChange()"
+              (focus)="onNameFocus()"
+              (blur)="closeDropdown()"
+              (keydown)="onNameKeyDown($event)"
+              placeholder="Select or search for a person"
+              aria-describedby="name-help"
+              aria-autocomplete="list"
+              [attr.aria-controls]="showDropdown() ? 'name-dropdown' : null"
+              [attr.aria-activedescendant]="highlightedIndex() >= 0 ? 'person-option-' + highlightedIndex() : null"
+              required
+              [disabled]="submitting() || isLoadingPeople()"
+              autocomplete="off"
+            />
+            @if (showDropdown() && !isLoadingPeople() && filteredPeople().length > 0) {
+              <ul 
+                id="name-dropdown" 
+                class="dropdown-list" 
+                role="listbox"
+                aria-label="Personnel list"
+              >
+                @for (person of filteredPeople(); track person.personId; let idx = $index) {
+                  <li
+                    [id]="'person-option-' + idx"
+                    class="dropdown-item"
+                    [class.highlighted]="idx === highlightedIndex()"
+                    (mousedown)="selectPerson(person)"
+                    (mouseenter)="highlightedIndex.set(idx)"
+                    role="option"
+                    [attr.aria-selected]="name() === person.name"
+                  >
+                    <div class="person-name">{{ person.name }}</div>
+                    @if (person.currentRank || person.currentDutyTitle) {
+                      <div class="person-details">
+                        @if (person.currentRank) {
+                          <span class="rank">{{ person.currentRank }}</span>
+                        }
+                        @if (person.currentDutyTitle) {
+                          <span class="duty">{{ person.currentDutyTitle }}</span>
+                        }
+                      </div>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+            @if (showDropdown() && !isLoadingPeople() && filteredPeople().length === 0 && name().trim()) {
+              <div class="dropdown-empty">
+                No matching personnel found
+              </div>
+            }
+          </div>
+          @if (isLoadingPeople()) {
+            <small class="form-help">
+              <span class="spinner-sm" aria-hidden="true"></span>
+              Loading personnel...
+            </small>
+          } @else {
+            <small id="name-help" class="form-help">
+              Select a person from the dropdown. Type to filter the list.
+            </small>
+          }
+        </div>
+
+        <!-- Rank Field -->
+        <div class="form-group">
+          <label for="rank" class="form-label">
+            Rank
+            <span class="required" aria-label="required">*</span>
+          </label>
+          <select
+            id="rank"
+            class="form-select"
+            [value]="rank()"
+            (change)="rank.set($any($event.target).value); onFieldChange()"
+            aria-describedby="rank-help"
+            required
+            [disabled]="submitting()"
+          >
+            <option value="">Select rank...</option>
+            @for (r of ranks; track r) {
+              <option [value]="r">{{ r }}</option>
+            }
+          </select>
+          <small id="rank-help" class="form-help">
+            Select the astronaut's military rank for this assignment
+          </small>
+        </div>
+
+        <!-- Duty Title Field -->
+        <div class="form-group">
+          <label for="dutyTitle" class="form-label">
+            Duty Title
+            <span class="required" aria-label="required">*</span>
+          </label>
+          <select
+            id="dutyTitle"
+            class="form-select"
+            [value]="dutyTitle()"
+            (change)="dutyTitle.set($any($event.target).value); onFieldChange()"
+            aria-describedby="duty-help"
+            required
+            [disabled]="submitting()"
+          >
+            <option value="">Select duty title...</option>
+            @for (duty of duties; track duty) {
+              <option [value]="duty">{{ duty }}</option>
+            }
+          </select>
+          <small id="duty-help" class="form-help">
+            Select the duty assignment. Use "RETIRED" to mark an astronaut as retired
+          </small>
+        </div>
+
+        <!-- Start Date Field -->
+        <div class="form-group">
+          <label for="dutyStartDate" class="form-label">
+            Duty Start Date
+            <span class="required" aria-label="required">*</span>
+          </label>
+          <input
+            type="date"
+            id="dutyStartDate"
+            class="form-input"
+            [value]="dutyStartDate()"
+            (input)="dutyStartDate.set($any($event.target).value); onFieldChange()"
+            [max]="getTodayDate()"
+            aria-describedby="date-help"
+            required
+            [disabled]="submitting()"
+          />
+          <small id="date-help" class="form-help">
+            The date this duty assignment begins. End date of previous duty will be automatically set
+          </small>
+        </div>
+
+        @if (error()) {
+          <div class="form-error-box" role="alert">
+            {{ error() }}
+          </div>
+        }
+
+        <div class="form-actions">
+          <button
+            type="submit"
+            class="btn btn-primary"
+            [disabled]="submitting() || !name().trim() || !rank() || !dutyTitle() || !dutyStartDate()"
+            [attr.aria-busy]="submitting()"
+          >
+            @if (submitting()) {
+              <span class="spinner-sm" aria-hidden="true"></span>
+              <span>Creating Assignment...</span>
+            } @else {
+              <span>Create Assignment</span>
+            }
+          </button>
+
+          <a
+            [routerLink]="name() ? ['/personnel', name()] : ['/personnel']"
+            class="btn btn-secondary"
+            [class.disabled]="submitting()"
+            [attr.aria-disabled]="submitting()"
+          >
+            Cancel
+          </a>
+        </div>
+      </form>
+
+      <div class="info-box" role="note">
+        <h3>Important Rules</h3>
+        <ul>
+          <li><strong>Current Duty:</strong> A person can only hold one current duty at a time. The end date will not be set</li>
+          <li><strong>Previous Duties:</strong> When a new duty is assigned, the previous duty's end date is automatically set to the day before the new start date</li>
+          <li><strong>Retirement:</strong> Assigning a "RETIRED" duty will mark the astronaut as retired and set their career end date</li>
+          <li><strong>Date Rules:</strong> Duty start dates cannot be in the future and must be unique for each person/duty combination</li>
+        </ul>
+      </div>
+    }
+  </div>
+</div>

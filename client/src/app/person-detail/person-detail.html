@@ -1,0 +1,218 @@
+<div class="person-detail-page">
+  <!-- Breadcrumb Navigation -->
+  <nav aria-label="Breadcrumb" class="breadcrumb">
+    <ol>
+      <li><a routerLink="/">Home</a></li>
+      <li><a routerLink="/personnel">Personnel</a></li>
+      <li aria-current="page">{{ person()?.name || 'Loading...' }}</li>
+    </ol>
+  </nav>
+
+  <!-- Loading State -->
+  @if (loading()) {
+    <div class="loading-container" role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <p>Loading person details...</p>
+    </div>
+  }
+
+  <!-- Error State -->
+  @if (error()) {
+    <div class="error-container" role="alert">
+      <h2>Error Loading Person</h2>
+      <p>{{ error() }}</p>
+      <div class="error-actions">
+        <button (click)="loadPerson(person()?.name || '')" class="btn btn-secondary">Try Again</button>
+        <a routerLink="/personnel" class="btn btn-primary">Back to Personnel</a>
+      </div>
+    </div>
+  }
+
+  <!-- Person Content -->
+  @if (!loading() && !error() && person()) {
+    <div class="person-content">
+      <!-- Header Card -->
+      <div class="header-card">
+        <div class="person-info">
+          <div class="avatar" aria-hidden="true">
+            {{ person()!.name.charAt(0).toUpperCase() }}
+          </div>
+          <div class="info-content">
+            <h1>{{ person()!.name }}</h1>
+            @if (isAstronaut()) {
+              <div class="status-badges">
+                <span 
+                  class="badge"
+                  [class.badge-active]="!isRetired()"
+                  [class.badge-retired]="isRetired()"
+                  role="status"
+                >
+                  {{ isRetired() ? 'Retired Astronaut' : 'Active Astronaut' }}
+                </span>
+              </div>
+            } @else {
+              <span class="badge badge-personnel" role="status">Personnel</span>
+            }
+          </div>
+        </div>
+        
+        <div class="header-actions">
+          <a 
+            [routerLink]="['/duties/new']" 
+            [queryParams]="{name: person()!.name}"
+            class="btn btn-primary"
+            aria-label="Add new duty for {{ person()!.name }}"
+          >
+            + Add Duty
+          </a>
+        </div>
+      </div>
+
+      <!-- Career Summary (if astronaut) -->
+      @if (isAstronaut() && person()) {
+        <section class="career-summary" aria-labelledby="career-heading">
+          <h2 id="career-heading">Career Summary</h2>
+          
+          <div class="summary-grid">
+            <div class="summary-card">
+              <div class="summary-label">Current Rank</div>
+              <div class="summary-value">{{ person()!.currentRank }}</div>
+            </div>
+            
+            <div class="summary-card">
+              <div class="summary-label">Current Duty</div>
+              <div class="summary-value">{{ person()!.currentDutyTitle }}</div>
+            </div>
+            
+            <div class="summary-card">
+              <div class="summary-label">Career Start</div>
+              <div class="summary-value">{{ formatDate(person()!.careerStartDate) }}</div>
+            </div>
+            
+            @if (person()!.careerEndDate) {
+              <div class="summary-card">
+                <div class="summary-label">Career End</div>
+                <div class="summary-value">{{ formatDate(person()!.careerEndDate) }}</div>
+              </div>
+            }
+            
+            @if (careerDurationDays()) {
+              <div class="summary-card">
+                <div class="summary-label">Total Service</div>
+                <div class="summary-value">{{ careerDurationDays() }} days</div>
+              </div>
+            }
+          </div>
+        </section>
+      }
+
+      <!-- Astronaut Duties Section -->
+      <section class="duties-section" aria-labelledby="duties-heading">
+        <h2 id="duties-heading">Astronaut Duty History</h2>
+
+        @if (dutiesLoading()) {
+          <div class="loading-mini" role="status">
+            <div class="spinner-sm" aria-hidden="true"></div>
+            <p>Loading duty history...</p>
+          </div>
+        }
+
+        @if (dutiesError()) {
+          <div class="error-mini" role="alert">
+            <p>{{ dutiesError() }}</p>
+            <button (click)="loadDuties(person()!.name)" class="btn btn-sm btn-secondary">Retry</button>
+          </div>
+        }
+
+        @if (!dutiesLoading() && !dutiesError()) {
+          <!-- Current Duty -->
+          @if (activeDuty()) {
+            <article class="duty-card current-duty" aria-labelledby="current-duty-title">
+              <div class="duty-header">
+                <h3 id="current-duty-title">Current Assignment</h3>
+                <span class="duty-status-badge active" role="status">Active</span>
+              </div>
+              
+              <div class="duty-details">
+                <div class="detail-row">
+                  <span class="detail-label">Rank:</span>
+                  <span class="detail-value">{{ activeDuty()!.rank }}</span>
+                </div>
+                
+                <div class="detail-row">
+                  <span class="detail-label">Title:</span>
+                  <span class="detail-value">{{ activeDuty()!.dutyTitle }}</span>
+                </div>
+                
+                <div class="detail-row">
+                  <span class="detail-label">Start Date:</span>
+                  <span class="detail-value">{{ formatDateShort(activeDuty()!.dutyStartDate) }}</span>
+                </div>
+                
+                <div class="detail-row">
+                  <span class="detail-label">Duration:</span>
+                  <span class="detail-value">{{ calculateDuration(activeDuty()!.dutyStartDate) }}</span>
+                </div>
+              </div>
+            </article>
+          }
+
+          <!-- Past Duties -->
+          @if (pastDuties().length > 0) {
+            <div class="past-duties">
+              <h3>Previous Assignments</h3>
+              
+              <div class="duties-timeline">
+                @for (duty of pastDuties(); track duty.id) {
+                  <article class="duty-card past-duty">
+                    <div class="timeline-marker" aria-hidden="true"></div>
+                    
+                    <div class="duty-content">
+                      <div class="duty-header">
+                        <h4>{{ duty.dutyTitle }}</h4>
+                        <span class="duty-status-badge completed" role="status">Completed</span>
+                      </div>
+                      
+                      <div class="duty-details">
+                        <div class="detail-row">
+                          <span class="detail-label">Rank:</span>
+                          <span class="detail-value">{{ duty.rank }}</span>
+                        </div>
+                        
+                        <div class="detail-row">
+                          <span class="detail-label">Period:</span>
+                          <span class="detail-value">
+                            {{ formatDateShort(duty.dutyStartDate) }} - {{ formatDateShort(duty.dutyEndDate) }}
+                          </span>
+                        </div>
+                        
+                        <div class="detail-row">
+                          <span class="detail-label">Duration:</span>
+                          <span class="detail-value">{{ calculateDuration(duty.dutyStartDate, duty.dutyEndDate) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- No Duties State -->
+          @if (duties().length === 0) {
+            <div class="empty-state">
+              <p>No duty assignments recorded for {{ person()!.name }}.</p>
+              <a 
+                [routerLink]="['/duties/new']" 
+                [queryParams]="{name: person()!.name}"
+                class="btn btn-primary"
+              >
+                Add First Duty
+              </a>
+            </div>
+          }
+        }
+      </section>
+    </div>
+  }
+</div>

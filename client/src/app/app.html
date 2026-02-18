@@ -1,0 +1,96 @@
+<!-- Skip Navigation Link for 508 Compliance -->
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<!-- Header -->
+<header class="header" role="banner">
+  <div class="header-container">
+    <a routerLink="/" class="logo-link" aria-label="Stargate ACTS Home">
+      <svg class="logo-icon" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <circle cx="20" cy="20" r="14" fill="none" stroke="currentColor" stroke-width="1" />
+        <circle cx="20" cy="20" r="10" fill="none" stroke="currentColor" stroke-width="1" />
+        <path d="M 20 2 L 22 10 L 20 10 L 18 10 Z" fill="currentColor" />
+        <path d="M 30 6 L 28 13 L 27 12 L 26 11 Z" fill="currentColor" />
+        <path d="M 38 20 L 29 21 L 29 20 L 29 19 Z" fill="currentColor" />
+        <path d="M 30 34 L 27 28 L 28 27 L 29 26 Z" fill="currentColor" />
+        <path d="M 20 38 L 19 30 L 20 30 L 21 30 Z" fill="currentColor" />
+        <path d="M 10 34 L 13 28 L 14 29 L 15 30 Z" fill="currentColor" />
+        <path d="M 2 20 L 11 19 L 11 20 L 11 21 Z" fill="currentColor" />
+        <path d="M 10 6 L 14 11 L 13 12 L 12 13 Z" fill="currentColor" />
+      </svg>
+      <span class="logo-text">
+        <span class="logo-text-main">ACTS</span>
+        <span class="logo-text-sub">Stargate Command</span>
+      </span>
+    </a>
+
+    <button 
+      class="menu-toggle" 
+      [class.active]="isMenuOpen"
+      (click)="toggleMenu()"
+      [attr.aria-expanded]="isMenuOpen"
+      aria-controls="main-nav"
+      aria-label="Toggle navigation menu"
+      type="button">
+      <span class="menu-icon"></span>
+    </button>
+
+    <nav id="main-nav" class="nav" [class.open]="isMenuOpen" role="navigation" aria-label="Main navigation">
+      <a routerLink="/" class="nav-link" (click)="closeMenu()" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">
+        Home
+      </a>
+      
+      @if (!authService.isAuthenticated()) {
+        <a routerLink="/login" class="nav-link" (click)="closeMenu()" routerLinkActive="active">
+          Login
+        </a>
+        <a routerLink="/register" class="nav-link" (click)="closeMenu()" routerLinkActive="active">
+          Register
+        </a>
+      }
+      
+      @if (authService.isAuthenticated()) {
+        <a routerLink="/personnel" class="nav-link" (click)="closeMenu()" routerLinkActive="active">
+          Personnel
+        </a>
+        <a routerLink="/duties/new" class="nav-link" (click)="closeMenu()" routerLinkActive="active">
+          Add Duty
+        </a>
+      }
+      
+      @if (authService.isAdmin()) {
+        <a routerLink="/admin" class="nav-link" (click)="closeMenu()" routerLinkActive="active">
+          Admin
+        </a>
+      }
+      
+      @if (authService.isAuthenticated()) {
+        <div class="nav-user">
+          <span class="nav-user-email">{{ authService.user()?.email }}</span>
+          <button class="btn-logout" (click)="logout()" type="button" aria-label="Logout">
+            Logout
+          </button>
+        </div>
+      }
+    </nav>
+  </div>
+</header>
+
+<!-- Main Content -->
+<main id="main-content" role="main">
+  <router-outlet />
+</main>
+
+<!-- Footer -->
+<footer class="footer" role="contentinfo">
+  <div class="footer-container">
+    <div class="footer-content">
+      <p class="footer-text">
+        &copy; {{ currentYear }} Stargate Command. All rights reserved.
+      </p>
+      <p class="footer-classification">
+        <span class="classification-badge" aria-label="Classification level: Unclassified">UNCLASSIFIED</span>
+      </p>
+    </div>
+  </div>
+</footer>
