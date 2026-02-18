@@ -1,11 +1,1 @@
-{
-  "Version": 1,
-  "Hash": "kPmXufU7TmazbkSRP0AHy4x9ic0H8OaPH7MrDuFg48Y=",
-  "Source": "StargateAPI",
-  "BasePath": "_content/StargateAPI",
-  "Mode": "Default",
-  "ManifestType": "Build",
-  "ReferencedProjectsConfiguration": [],
-  "DiscoveryPatterns": [],
-  "Assets": []
-}
+{"Version":1,"Hash":"DzPKc4Bg60CBhECz4nGBxZ8HNxalHCqyUsmaiI8osFc=","Source":"StargateAPI","BasePath":"/","Mode":"Root","ManifestType":"Build","ReferencedProjectsConfiguration":[],"DiscoveryPatterns":[],"Assets":[],"Endpoints":[]}

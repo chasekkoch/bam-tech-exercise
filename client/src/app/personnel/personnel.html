@@ -1,0 +1,192 @@
+<div class="personnel-page">
+  <header class="page-header">
+    <div class="header-content">
+      <h1 id="page-title">Personnel Directory</h1>
+      <p class="subtitle">Stargate Personnel Management System</p>
+    </div>
+    <div class="header-actions">
+      <a routerLink="/personnel/new" class="btn btn-primary" aria-label="Add new person">
+        <span class="btn-icon" aria-hidden="true">+</span>
+        <span>Add Person</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Stats Section -->
+  <section class="stats-section" aria-label="Personnel statistics">
+    <div class="stat-card">
+      <div class="stat-value">{{ people().length }}</div>
+      <div class="stat-label">Total Personnel</div>
+    </div>
+    <div class="stat-card stat-astronaut">
+      <div class="stat-value">{{ astronautCount() }}</div>
+      <div class="stat-label">Active Astronauts</div>
+    </div>
+    <div class="stat-card stat-non-astronaut">
+      <div class="stat-value">{{ nonAstronautCount() }}</div>
+      <div class="stat-label">Non-Astronaut Personnel</div>
+    </div>
+  </section>
+
+  <!-- Search and Filters -->
+  <section class="filters-section" aria-label="Search and filter controls">
+    <div class="search-box">
+      <label for="search-input" class="sr-only">Search personnel</label>
+      <input
+        id="search-input"
+        type="search"
+        class="search-input"
+        placeholder="Search by name, rank, or duty..."
+        [value]="searchTerm()"
+        (input)="onSearchChange($any($event.target).value)"
+        aria-describedby="search-help"
+      />
+      <span id="search-help" class="sr-only">Enter text to search personnel by name, rank, or duty title</span>
+    </div>
+
+    <div class="results-info" role="status" aria-live="polite">
+      <span>Showing {{ paginatedPeople().length }} of {{ filteredPeople().length }} results</span>
+    </div>
+  </section>
+
+  <!-- Loading State -->
+  @if (loading()) {
+    <div class="loading-container" role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <p>Loading personnel...</p>
+    </div>
+  }
+
+  <!-- Error State -->
+  @if (error()) {
+    <div class="error-container" role="alert">
+      <h2>Error Loading Personnel</h2>
+      <p>{{ error() }}</p>
+      <button (click)="loadPeople()" class="btn btn-secondary">Try Again</button>
+    </div>
+  }
+
+  <!-- Personnel Table -->
+  @if (!loading() && !error()) {
+    <div class="table-container">
+      <table class="personnel-table" aria-labelledby="page-title">
+        <thead>
+          <tr>
+            <th scope="col">
+              <button
+                class="sort-button"
+                (click)="sortBy('name')"
+                aria-label="Sort by name"
+                [attr.aria-pressed]="sortField() === 'name'"
+              >
+                Name {{ getSortIcon('name') }}
+              </button>
+            </th>
+            <th scope="col">
+              <button
+                class="sort-button"
+                (click)="sortBy('currentRank')"
+                aria-label="Sort by rank"
+                [attr.aria-pressed]="sortField() === 'currentRank'"
+              >
+                Current Rank {{ getSortIcon('currentRank') }}
+              </button>
+            </th>
+            <th scope="col">
+              <button
+                class="sort-button"
+                (click)="sortBy('currentDutyTitle')"
+                aria-label="Sort by duty title"
+                [attr.aria-pressed]="sortField() === 'currentDutyTitle'"
+              >
+                Current Duty {{ getSortIcon('currentDutyTitle') }}
+              </button>
+            </th>
+            <th scope="col">Career Start</th>
+            <th scope="col">Status</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (person of paginatedPeople(); track person.personId) {
+            <tr>
+              <td data-label="Name">
+                <span class="person-name">{{ person.name }}</span>
+              </td>
+              <td data-label="Current Rank">
+                {{ person.currentRank || 'N/A' }}
+              </td>
+              <td data-label="Current Duty">
+                {{ person.currentDutyTitle || 'N/A' }}
+              </td>
+              <td data-label="Career Start">
+                {{ formatDate(person.careerStartDate) }}
+              </td>
+              <td data-label="Status">
+                <span 
+                  class="status-badge"
+                  [class]="getStatusClass(person)"
+                  role="status"
+                >
+                  {{ getStatusLabel(person) }}
+                </span>
+              </td>
+              <td class="actions-cell" data-label="Actions">
+                <a 
+                  [routerLink]="['/personnel', person.name]"
+                  class="btn btn-sm btn-secondary"
+                  [attr.aria-label]="'View details for ' + person.name"
+                >
+                  View Details
+                </a>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6" class="empty-state">
+                <p>No personnel found matching your search criteria.</p>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    @if (totalPages() > 1) {
+      <nav class="pagination" aria-label="Pagination navigation">
+        <button
+          class="pagination-btn"
+          (click)="goToPage(currentPage() - 1)"
+          [disabled]="currentPage() === 1"
+          aria-label="Go to previous page"
+        >
+          ← Previous
+        </button>
+
+        <div class="pagination-pages" role="group" aria-label="Page numbers">
+          @for (page of [].constructor(totalPages()); track $index) {
+            <button
+              class="pagination-page"
+              [class.active]="currentPage() === $index + 1"
+              (click)="goToPage($index + 1)"
+              [attr.aria-label]="'Go to page ' + ($index + 1)"
+              [attr.aria-current]="currentPage() === $index + 1 ? 'page' : null"
+            >
+              {{ $index + 1 }}
+            </button>
+          }
+        </div>
+
+        <button
+          class="pagination-btn"
+          (click)="goToPage(currentPage() + 1)"
+          [disabled]="currentPage() === totalPages()"
+          aria-label="Go to next page"
+        >
+          Next →
+        </button>
+      </nav>
+    }
+  }
+</div>

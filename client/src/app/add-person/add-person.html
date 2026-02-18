@@ -1,0 +1,92 @@
+<div class="add-person-page">
+  <nav aria-label="Breadcrumb" class="breadcrumb">
+    <ol>
+      <li><a routerLink="/">Home</a></li>
+      <li><a routerLink="/personnel">Personnel</a></li>
+      <li aria-current="page">Add New Person</li>
+    </ol>
+  </nav>
+
+  <div class="form-container">
+    <header class="form-header">
+      <h1>Add New Person</h1>
+      <p>Add a new person to the Stargate personnel database</p>
+    </header>
+
+    @if (success()) {
+      <div class="success-message" role="alert" aria-live="polite">
+        <svg class="success-icon" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+        </svg>
+        <div>
+          <h2>Person Created Successfully!</h2>
+          <p>Redirecting to person detail page...</p>
+        </div>
+      </div>
+    } @else {
+      <form (submit)="onSubmit($event)" class="person-form" novalidate>
+        <div class="form-group">
+          <label for="name" class="form-label">
+            Full Name
+            <span class="required" aria-label="required">*</span>
+          </label>
+          <input
+            type="text"
+            id="name"
+            class="form-input"
+            [class.error]="error()"
+            [value]="name()"
+            (input)="onNameChange($any($event.target).value)"
+            placeholder="Enter full name"
+            aria-describedby="name-help name-error"
+            [attr.aria-invalid]="error() ? 'true' : null"
+            required
+            [disabled]="submitting()"
+          />
+          <small id="name-help" class="form-help">
+            Enter the person's full name as it appears in official records
+          </small>
+          @if (error()) {
+            <div id="name-error" class="form-error" role="alert">
+              {{ error() }}
+            </div>
+          }
+        </div>
+
+        <div class="form-actions">
+          <button
+            type="submit"
+            class="btn btn-primary"
+            [disabled]="submitting() || !name().trim()"
+            [attr.aria-busy]="submitting()"
+          >
+            @if (submitting()) {
+              <span class="spinner-sm" aria-hidden="true"></span>
+              <span>Creating...</span>
+            } @else {
+              <span>Create Person</span>
+            }
+          </button>
+
+          <a
+            routerLink="/personnel"
+            class="btn btn-secondary"
+            [class.disabled]="submitting()"
+            [attr.aria-disabled]="submitting()"
+          >
+            Cancel
+          </a>
+        </div>
+      </form>
+
+      <div class="info-box" role="note">
+        <h3>Information</h3>
+        <ul>
+          <li>New personnel will be added to the database but will not have astronaut status until duties are assigned</li>
+          <li>After creation, you can add astronaut duty assignments from the person's detail page</li>
+          <li>Names should be unique and match official personnel records</li>
+        </ul>
+      </div>
+    }
+  </div>
+</div>
