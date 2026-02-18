@@ -4,7 +4,7 @@ services:
       context: ./client
       dockerfile: Dockerfile.dev
       target: development
-    command: npm start
+    command: ng serve --host 0.0.0.0 --poll 2000 --proxy-config proxy.conf.json
     ports:
       - "4201:4200"
     volumes:

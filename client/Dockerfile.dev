@@ -3,11 +3,20 @@
 FROM node:20-alpine AS development
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
-RUN npm install
 
+# Install dependencies with legacy peer deps flag
+RUN npm ci --legacy-peer-deps
+
+# Copy source code
 COPY . .
+
+# Set PATH to include node_modules bin
+ENV PATH="/app/node_modules/.bin:$PATH"
 
 EXPOSE 4200
 
-CMD ["npm", "start"]
+# Override the Node entrypoint to run ng serve directly
+ENTRYPOINT []
+CMD ["ng", "serve", "--host", "0.0.0.0", "--poll", "2000", "--proxy-config", "proxy.conf.json"]
