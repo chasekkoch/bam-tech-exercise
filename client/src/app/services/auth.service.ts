@@ -14,7 +14,7 @@ import {
   providedIn: 'root'
 })
 export class AuthService {
-  private readonly apiUrl = 'http://localhost:8080/api/Auth';
+  private readonly apiUrl = '/api/Auth';
   private readonly tokenKey = 'stargate_token';
   
   // Reactive state using signals
