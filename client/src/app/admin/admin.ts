@@ -240,8 +240,7 @@ export class Admin implements OnInit, OnDestroy {
         this.loadingExceptions.set(false);
       },
       error: () => {
-        this
-.loadingExceptions.set(false);
+        this.loadingExceptions.set(false);
       }
     });
   }
