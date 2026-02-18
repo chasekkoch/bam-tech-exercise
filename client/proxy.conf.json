@@ -3,7 +3,6 @@
     "target": "https://stargate-api:8443",
     "secure": false,
     "changeOrigin": true,
-    "logLevel": "debug",
-    "rejectUnauthorized": false
+    "logLevel": "debug"
   }
 }
