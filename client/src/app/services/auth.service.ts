@@ -1,7 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap, of, catchError } from 'rxjs';
+import { Observable, tap, of, catchError, BehaviorSubject } from 'rxjs';
 import { 
   LoginRequest, 
   RegisterRequest, 
@@ -19,6 +19,10 @@ export class AuthService {
   
   // Reactive state using signals
   private userSignal = signal<User | null>(null);
+  
+  // Track initialization state
+  private initializationSubject = new BehaviorSubject<boolean>(false);
+  public initialized$ = this.initializationSubject.asObservable();
   
   // Public computed signals
   user = computed(() => this.userSignal());
@@ -43,12 +47,17 @@ export class AuthService {
       this.getCurrentUser().subscribe({
         next: (userInfo) => {
           this.setUser(userInfo);
+          this.initializationSubject.next(true);
         },
         error: () => {
           // Token is invalid or expired
           this.clearToken();
+          this.initializationSubject.next(true);
         }
       });
+    } else {
+      // No token, initialization complete
+      this.initializationSubject.next(true);
     }
   }
 
