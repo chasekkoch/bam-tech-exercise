@@ -7,7 +7,6 @@ import { LoginRequest } from '../models/auth.model';
 
 @Component({
   selector: 'app-login',
-  standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './login.html',
   styleUrls: ['./login.scss']

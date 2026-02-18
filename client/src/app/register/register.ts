@@ -7,7 +7,6 @@ import { RegisterRequest } from '../models/auth.model';
 
 @Component({
   selector: 'app-register',
-  standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './register.html',
   styleUrls: ['./register.scss']
