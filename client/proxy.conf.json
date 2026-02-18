@@ -1,6 +1,6 @@
 {
   "/api": {
-    "target": "http://stargate-api:8080",
+    "target": "https://stargate-api:8443",
     "secure": false,
     "changeOrigin": true,
     "logLevel": "debug"
