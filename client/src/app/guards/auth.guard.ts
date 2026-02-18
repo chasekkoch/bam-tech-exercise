@@ -36,6 +36,12 @@ export const adminGuard: CanActivateFn = (): Observable<boolean | UrlTree> => {
     filter(initialized => initialized),
     take(1),
     map(() => {
+      // First check if user is authenticated
+      if (!authService.isAuthenticated()) {
+        return router.createUrlTree(['/login']);
+      }
+      
+      // Then check if user is admin
       if (authService.isAdmin()) {
         return true;
       }
