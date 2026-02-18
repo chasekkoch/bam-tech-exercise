@@ -624,7 +624,6 @@ docker compose up --build
 - [CHANGELOG.md](./CHANGELOG.md) - Feature history and release notes
 - [SUGGESTIONS.md](./SUGGESTIONS.md) - Modernization and scalability recommendations
 - [REQUIREMENTS.md](./REQUIREMENTS.md) - Original project requirements
-- [COVERAGE_REPORT.md](./api.tests/COVERAGE_REPORT.md) - Code coverage analysis
 
 ---
 
