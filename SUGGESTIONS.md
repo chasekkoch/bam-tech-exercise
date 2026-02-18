@@ -592,7 +592,377 @@ public async Task<ActionResult> CreateDuty([FromBody] CreateAstronautDutyCommand
 
 ---
 
-### 12. Dependency Scanning & Software Composition Analysis (SCA)
+### 12. Input Sanitization & XSS (Cross-Site Scripting) Prevention
+
+**Current State**: Angular frontend uses string interpolation for displaying user-provided data (names, duty titles); no explicit sanitization layer; reliant on Angular's default XSS protection.
+
+**Recommendation**: Implement multi-layer sanitization strategy to neutralize XSS attack vectors and reduce frontend attack surface.
+
+**XSS Attack Vectors in Current Application**:
+
+```html
+<!-- VULNERABLE: User input rendered without sanitization -->
+<div>{{ person.name }}</div>                    <!-- Interpolation -->
+<p [innerText]="duty.title"></p>               <!-- Property binding -->
+<span [innerHTML]="astronautDetail.notes"></span>  <!-- HTML binding - DANGEROUS! -->
+
+<!-- Attack Example -->
+<!-- If person.name = "<img src=x onerror='alert(document.cookie)'>" -->
+<!-- Attacker steals session tokens -->
+```
+
+**Solution: Defense-in-Depth Sanitization**
+
+**Layer 1: Input Validation (Backend)**
+```csharp
+// API-level input validation prevents malicious data entering system
+public class CreatePersonCommand
+{
+    [Required]
+    [StringLength(255, MinimumLength = 1)]
+    // Only allow alphanumeric, spaces, hyphens, apostrophes
+    [RegularExpression(@"^[a-zA-Z0-9\s\-'\.]{1,255}$", 
+        ErrorMessage = "Name contains invalid characters")]
+    public string Name { get; set; }
+}
+
+public class CreateAstronautDutyCommand
+{
+    [Required]
+    [StringLength(100)]
+    [RegularExpression(@"^[a-zA-Z0-9\s\-/()]{1,100}$",
+        ErrorMessage = "Duty title contains invalid characters")]
+    public string DutyTitle { get; set; }
+}
+
+// Whitelist approach: Define allowed characters per field
+public static class InputSanitization
+{
+    public static bool IsValidPersonName(string input)
+    {
+        // Allow: letters, spaces, apostrophes, hyphens, periods
+        var allowedPattern = @"^[a-zA-Z\s\-'\.]{1,255}$";
+        return System.Text.RegularExpressions.Regex.IsMatch(input, allowedPattern);
+    }
+    
+    public static bool IsValidDutyTitle(string input)
+    {
+        // Allow: alphanumeric, spaces, hyphens, slashes, parentheses
+        var allowedPattern = @"^[a-zA-Z0-9\s\-/()]{1,100}$";
+        return System.Text.RegularExpressions.Regex.IsMatch(input, allowedPattern);
+    }
+}
+
+// Validation attribute
+[AttributeUsage(AttributeTargets.Property)]
+public class SafeInputAttribute : ValidationAttribute
+{
+    private readonly int _maxLength;
+    private readonly SafeInputType _type;
+    
+    public SafeInputAttribute(SafeInputType type, int maxLength = 255)
+    {
+        _type = type;
+        _maxLength = maxLength;
+    }
+    
+    protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
+    {
+        if (value == null || string.IsNullOrEmpty(value.ToString()))
+            return ValidationResult.Success;
+        
+        var input = value.ToString()!;
+        
+        if (input.Length > _maxLength)
+            return new ValidationResult($"Input exceeds {_maxLength} characters");
+        
+        var isValid = _type switch
+        {
+            SafeInputType.PersonName => InputSanitization.IsValidPersonName(input),
+            SafeInputType.DutyTitle => InputSanitization.IsValidDutyTitle(input),
+            SafeInputType.Email => InputSanitization.IsValidEmail(input),
+            _ => false
+        };
+        
+        return isValid ? ValidationResult.Success 
+            : new ValidationResult($"Input contains invalid characters for {_type}");
+    }
+}
+
+public enum SafeInputType { PersonName, DutyTitle, Email, Notes }
+
+// Usage
+public class CreatePersonCommand
+{
+    [Required]
+    [SafeInput(SafeInputType.PersonName, 255)]
+    public string Name { get; set; }
+}
+```
+
+**Layer 2: Output Encoding (Frontend - Angular)**
+
+Angular provides built-in XSS protection, but explicit encoding adds defense-in-depth:
+
+```typescript
+// safe-html.pipe.ts - Custom pipe for safe HTML rendering when needed
+import { Injectable, Pipe, PipeTransform } from '@angular/core';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+
+@Pipe({
+  name: 'safeHtml',
+  standalone: true
+})
+export class SafeHtmlPipe implements PipeTransform {
+  constructor(private sanitizer: DomSanitizer) {}
+
+  transform(value: string): SafeHtml {
+    // Sanitize HTML and remove dangerous tags (script, iframe, etc.)
+    return this.sanitizer.sanitize(SecurityContext.HTML, value) || '';
+  }
+}
+
+// Usage in template (only when HTML rendering is required)
+<div [innerHTML]="astronautDetail.notes | safeHtml"></div>
+
+// Better: Use text interpolation (automatic HTML encoding)
+<div>{{ person.name }}</div>                    // ✅ Auto-encoded
+<p [textContent]="duty.title"></p>             // ✅ Text only, no HTML
+<span [innerHTML]="notes | safeHtml"></span>   // ⚠️ Use only if sanitized
+```
+
+```typescript
+// Input sanitization utility service
+import { Injectable } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class InputSanitizationService {
+  // Whitelist of allowed characters per field
+  private readonly fieldValidationPatterns: Record<string, RegExp> = {
+    personName: /^[a-zA-Z\s\-'\.]{1,255}$/,
+    dutyTitle: /^[a-zA-Z0-9\s\-/()]{1,100}$/,
+    email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+    rank: /^[A-Z0-9\-]{1,20}$/
+  };
+
+  constructor(private sanitizer: DomSanitizer) {}
+
+  // Validate input matches whitelist
+  validateInput(input: string, fieldType: string): boolean {
+    const pattern = this.fieldValidationPatterns[fieldType];
+    return pattern ? pattern.test(input) : false;
+  }
+
+  // Remove/escape potentially dangerous characters
+  sanitizeForDisplay(input: string): string {
+    // Remove control characters, null bytes
+    return input.replace(/[\x00-\x1F\x7F]/g, '').trim();
+  }
+
+  // Prevent common XSS patterns
+  detectXSSPatterns(input: string): boolean {
+    const xssPatterns = [
+      /<script[^>]*>.*?<\/script>/gi,
+      /javascript:/gi,
+      /on\w+\s*=/gi,                    // event handlers
+      /<iframe/gi,
+      /<object/gi,
+      /<embed/gi,
+      /eval\(/gi,
+      /expression\(/gi
+    ];
+    
+    return xssPatterns.some(pattern => pattern.test(input));
+  }
+}
+
+// Usage in component
+export class PersonDetailComponent {
+  personName: string = '';
+
+  constructor(private sanitizationService: InputSanitizationService) {}
+
+  onPersonNameChange(value: string) {
+    // Validate input
+    if (!this.sanitizationService.validateInput(value, 'personName')) {
+      this.error = 'Name contains invalid characters';
+      return;
+    }
+
+    // Detect XSS attempts
+    if (this.sanitizationService.detectXSSPatterns(value)) {
+      this.error = 'Potential XSS attack detected';
+      console.warn('XSS attempt detected:', value);
+      return;
+    }
+
+    this.personName = this.sanitizationService.sanitizeForDisplay(value);
+  }
+}
+```
+
+**Layer 3: Content Security Policy (CSP) Headers**
+
+Configure strict CSP to prevent injection of external scripts:
+
+```csharp
+// Program.cs - ASP.NET Core
+app.Use(async (context, next) =>
+{
+    // Strict CSP header - only allow scripts from same origin
+    context.Response.Headers.Add("Content-Security-Policy", 
+        "default-src 'self'; " +
+        "script-src 'self'; " +                    // No inline scripts or eval
+        "style-src 'self' 'unsafe-inline'; " +     // Styles (Angular requires unsafe-inline)
+        "img-src 'self' data: https:; " +          // Images
+        "font-src 'self'; " +
+        "connect-src 'self'; " +                   // API calls to own domain only
+        "frame-ancestors 'none'; " +               // Prevent clickjacking
+        "base-uri 'self'; " +                      // Restrict base tag
+        "form-action 'self'; " +                   // Form submissions to own domain
+        "upgrade-insecure-requests");              // Force HTTPS
+    
+    // Prevent browsers from MIME-sniffing
+    context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
+    
+    // Disable framing for clickjacking protection
+    context.Response.Headers.Add("X-Frame-Options", "DENY");
+    
+    // Disable XSS mode in legacy IE
+    context.Response.Headers.Add("X-XSS-Protection", "1; mode=block");
+    
+    // Prevent referrer leakage
+    context.Response.Headers.Add("Referrer-Policy", "strict-origin-when-cross-origin");
+    
+    await next();
+});
+```
+
+**Layer 4: HTTP-Only Cookies (Also a STIG requirement)**
+
+Store JWT tokens in HTTP-only cookies to prevent JavaScript access:
+
+```csharp
+// Program.cs
+var jwtSettings = configuration.GetSection("Jwt");
+
+services.AddAuthentication(options =>
+{
+    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = "oidc";
+})
+.AddCookie(options =>
+{
+    options.Cookie.HttpOnly = true;              // ✅ Prevent JS access
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;  // ✅ HTTPS only
+    options.Cookie.SameSite = SameSiteMode.Strict; // ✅ CSRF protection
+    options.Cookie.Name = "auth_token";
+    options.ExpireTimeSpan = TimeSpan.FromHours(24);
+});
+```
+
+**Layer 5: Server-Side Output Encoding**
+
+When returning HTML content from APIs, ensure proper encoding:
+
+```csharp
+// API response model
+public class PersonAstronautResponse
+{
+    // Always return plain text fields
+    public string Name { get; set; }  // No HTML encoding needed if validated
+    public string Email { get; set; }
+    public string[] Roles { get; set; }
+    
+    // Static method to safely construct response
+    public static PersonAstronautResponse FromPerson(Person person)
+    {
+        return new PersonAstronautResponse
+        {
+            // Clean data from database (already validated at input)
+            Name = System.Net.WebUtility.HtmlEncode(person.Name),
+            Email = System.Net.WebUtility.HtmlEncode(person.Email)
+        };
+    }
+}
+```
+
+**Implementation Checklist**
+
+| Layer | Implementation | Status |
+|---|---|---|
+| **Backend Input Validation** | RegEx whitelist validation on all text inputs | ☐ Add to Commands/Queries |
+| **Frontend Input Validation** | Angular form validation + input sanitization service | ☐ Create InputSanitizationService |
+| **Template Security** | Use `{{ }}` interpolation; avoid `[innerHTML]`; use pipes | ☐ Audit person-list, person-detail components |
+| **CSP Headers** | Strict Content-Security-Policy header | ☐ Add to middleware |
+| **HTTP-Only Cookies** | Store JWT in HTTP-only, Secure, SameSite cookies | ☐ Update auth configuration |
+| **Output Encoding** | HTML encode string values in API responses | ☐ Add to response DTOs |
+| **Regular Expressions** | Document allowed patterns for each input field | ☐ Create constants file for patterns |
+| **Testing** | Unit tests for sanitization functions; penetration testing | ☐ Add XSS test cases |
+
+**Testing XSS Prevention**
+
+```csharp
+[TestClass]
+public class XSSPreventionTests
+{
+    [TestMethod]
+    public void PersonName_ValidInput_Accepted()
+    {
+        var input = "John O'Sullivan-Smith";
+        var result = InputSanitization.IsValidPersonName(input);
+        Assert.IsTrue(result);
+    }
+    
+    [TestMethod]
+    public void PersonName_ScriptTag_Rejected()
+    {
+        var input = "<script>alert('XSS')</script>";
+        var result = InputSanitization.IsValidPersonName(input);
+        Assert.IsFalse(result);
+    }
+    
+    [TestMethod]
+    public void PersonName_JavaScriptURI_Rejected()
+    {
+        var input = "javascript:void(0)";
+        var result = InputSanitization.IsValidPersonName(input);
+        Assert.IsFalse(result);
+    }
+    
+    [TestMethod]
+    public void PersonName_EventHandler_Rejected()
+    {
+        var input = "Test' onerror='alert(1)' '";
+        var result = InputSanitization.IsValidPersonName(input);
+        Assert.IsFalse(result);
+    }
+}
+```
+
+**Benefits**:
+- ✅ **Prevents XSS attacks** - Multiple layers catch injection attempts at different stages
+- ✅ **Whitelist approach** - Only allow known-safe characters per field
+- ✅ **OWASP A7 compliance** - Mitigates Cross-Site Scripting vulnerability
+- ✅ **STIG compliance** - SI-10 (Information System Monitoring) via CSP logging
+- ✅ **Performance** - Input validation prevents malicious data pollution
+- ✅ **User awareness** - Reject invalid input with clear error messages
+- ✅ **Audit trail** - Log XSS detection attempts for security monitoring
+
+**STIG Compliance Mapping**:
+| Control | Implementation |
+|---|---|
+| SI-10 (Information System Monitoring) | CSP violations logged via browser console |
+| SI-4 (Information System Monitoring) | Server detects XSS patterns in input |
+| SC-7 (Boundary Protection) | CSP acts as boundary for script execution |
+| AC-2 (Account Management) | Protects user sessions and cookies |
+
+---
+
+### 13. Dependency Scanning & Software Composition Analysis (SCA)
 
 **Current State**: Using latest NuGet packages; no automated scanning.
 
@@ -630,7 +1000,7 @@ phases:
 
 ---
 
-### 13. Static & Dynamic Application Security Testing (SAST/DAST)
+### 14. Static & Dynamic Application Security Testing (SAST/DAST)
 
 **Current State**: Manual code reviews; no automated security scanning in CI/CD pipeline.
 
@@ -731,9 +1101,298 @@ npm audit
 
 ---
 
+## Code Quality & Architecture
+
+### 15. Extract Business Logic to Rules Engine & Utility Classes
+
+**Current State**: Business logic embedded within MediatR Commands and Queries; scattered validation and business rules across handlers.
+
+**Recommendation**: Extract business logic from command/query handlers into reusable, testable Rules Engine and Utility classes to improve code maintainability, testability, and adherence to SOLID principles.
+
+**Problem Analysis**:
+
+Current architecture in `CreateAstronautDuty.cs` example:
+```csharp
+// Current: Logic tightly coupled to command handler
+public class CreateAstronautDutyHandler : IRequestHandler<CreateAstronautDuty, AstronautDuty>
+{
+    public async Task<AstronautDuty> Handle(CreateAstronautDuty request, CancellationToken cancellationToken)
+    {
+        // Business validation scattered here
+        if (request.DutyEndDate != null && request.DutyEndDate < request.DutyStartDate)
+            throw new InvalidOperationException("End date must be after start date");
+        
+        // More complex logic
+        var overlappingDuties = await _context.AstronautDuties
+            .Where(d => d.PersonId == request.PersonId && 
+                   d.DutyStartDate <= request.DutyEndDate && 
+                   d.DutyEndDate >= request.DutyStartDate)
+            .ToListAsync();
+        
+        if (overlappingDuties.Any())
+            throw new InvalidOperationException("Duty overlaps with existing duties");
+        
+        // Handler logic mixed with business rules
+        var astronautDetail = await _context.AstronautDetails.FindAsync(request.PersonId);
+        if (astronautDetail == null) throw new NotFoundException();
+        
+        var duty = new AstronautDuty { /* ... */ };
+        _context.AstronautDuties.Add(duty);
+        await _context.SaveChangesAsync(cancellationToken);
+        
+        return duty;
+    }
+}
+```
+
+**Issues**:
+- ❌ Business rules can't be tested independently (require DB context)
+- ❌ Rules scattered across multiple handlers (hard to find all validations)
+- ❌ Violates Single Responsibility Principle (handler does too much)
+- ❌ Difficult to reuse rules in other commands/queries
+- ❌ Hard to audit which rules apply when
+
+**Solution: Rules Engine Pattern**
+
+Extract business logic into dedicated Rules/Validators:
+
+```csharp
+// 1. Create Rules Engine
+public interface IBusinessRule
+{
+    Task<RuleValidationResult> ValidateAsync(CancellationToken cancellationToken);
+}
+
+public class RuleValidationResult
+{
+    public bool IsValid { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string RuleName { get; set; }
+}
+
+// 2. Implement Specific Rules
+public class DutyDateRangeRule : IBusinessRule
+{
+    private readonly DateTime _dutyStartDate;
+    private readonly DateTime? _dutyEndDate;
+    
+    public DutyDateRangeRule(DateTime dutyStartDate, DateTime? dutyEndDate)
+    {
+        _dutyStartDate = dutyStartDate;
+        _dutyEndDate = dutyEndDate;
+    }
+    
+    public Task<RuleValidationResult> ValidateAsync(CancellationToken cancellationToken)
+    {
+        var isValid = _dutyEndDate == null || _dutyEndDate > _dutyStartDate;
+        return Task.FromResult(new RuleValidationResult
+        {
+            IsValid = isValid,
+            RuleName = nameof(DutyDateRangeRule),
+            ErrorMessage = isValid ? null : "End date must be after start date"
+        });
+    }
+}
+
+public class DutyOverlapRule : IBusinessRule
+{
+    private readonly IStargateContext _context;
+    private readonly int _personId;
+    private readonly DateTime _dutyStartDate;
+    private readonly DateTime? _dutyEndDate;
+    
+    public DutyOverlapRule(IStargateContext context, int personId, DateTime dutyStartDate, DateTime? dutyEndDate)
+    {
+        _context = context;
+        _personId = personId;
+        _dutyStartDate = dutyStartDate;
+        _dutyEndDate = dutyEndDate;
+    }
+    
+    public async Task<RuleValidationResult> ValidateAsync(CancellationToken cancellationToken)
+    {
+        var overlapping = await _context.AstronautDuties
+            .AsNoTracking()
+            .Where(d => d.PersonId == _personId && 
+                   d.DutyStartDate <= _dutyEndDate && 
+                   d.DutyEndDate >= _dutyStartDate)
+            .AnyAsync(cancellationToken);
+        
+        return new RuleValidationResult
+        {
+            IsValid = !overlapping,
+            RuleName = nameof(DutyOverlapRule),
+            ErrorMessage = overlapping ? "Duty overlaps with existing duties" : null
+        };
+    }
+}
+
+// 3. Create Rules Validator Service
+public interface IBusinessRulesValidator
+{
+    Task<ValidationResult> ValidateAllAsync(IEnumerable<IBusinessRule> rules, CancellationToken cancellationToken);
+}
+
+public class BusinessRulesValidator : IBusinessRulesValidator
+{
+    public async Task<ValidationResult> ValidateAllAsync(IEnumerable<IBusinessRule> rules, CancellationToken cancellationToken)
+    {
+        var results = await Task.WhenAll(
+            rules.Select(r => r.ValidateAsync(cancellationToken))
+        );
+        
+        var failures = results.Where(r => !r.IsValid).ToList();
+        
+        return new ValidationResult
+        {
+            IsValid = !failures.Any(),
+            Failures = failures
+        };
+    }
+}
+
+// 4. Refactored Handler
+public class CreateAstronautDutyHandler : IRequestHandler<CreateAstronautDuty, AstronautDuty>
+{
+    private readonly IStargateContext _context;
+    private readonly IBusinessRulesValidator _validator;
+    
+    public async Task<AstronautDuty> Handle(CreateAstronautDuty request, CancellationToken cancellationToken)
+    {
+        // Validate business rules
+        var rules = new IBusinessRule[]
+        {
+            new DutyDateRangeRule(request.DutyStartDate, request.DutyEndDate),
+            new DutyOverlapRule(_context, request.PersonId, request.DutyStartDate, request.DutyEndDate)
+        };
+        
+        var validationResult = await _validator.ValidateAllAsync(rules, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            throw new BusinessRuleViolationException(validationResult.Failures);
+        }
+        
+        // Create and save - handler focuses only on persistence
+        var duty = new AstronautDuty { /* ... */ };
+        _context.AstronautDuties.Add(duty);
+        await _context.SaveChangesAsync(cancellationToken);
+        
+        return duty;
+    }
+}
+
+// 5. Unit Test Business Rules (No DB required!)
+[TestClass]
+public class DutyDateRangeRuleTests
+{
+    [TestMethod]
+    public async Task ValidEndDate_ReturnsValid()
+    {
+        var rule = new DutyDateRangeRule(
+            DateTime.Now,
+            DateTime.Now.AddDays(1)
+        );
+        
+        var result = await rule.ValidateAsync(CancellationToken.None);
+        
+        Assert.IsTrue(result.IsValid);
+    }
+    
+    [TestMethod]
+    public async Task InvalidEndDate_ReturnsInvalid()
+    {
+        var rule = new DutyDateRangeRule(
+            DateTime.Now,
+            DateTime.Now.AddDays(-1)
+        );
+        
+        var result = await rule.ValidateAsync(CancellationToken.None);
+        
+        Assert.IsFalse(result.IsValid);
+        Assert.AreEqual("End date must be after start date", result.ErrorMessage);
+    }
+}
+```
+
+**Utility Classes for Common Operations**
+
+Extract helper logic into utility classes:
+
+```csharp
+// DateRangeUtility
+public static class DateRangeUtility
+{
+    public static bool IsValidRange(DateTime start, DateTime? end)
+        => end == null || end > start;
+    
+    public static bool OverlapsWith(DateTime start1, DateTime? end1, DateTime start2, DateTime? end2)
+        => start1 <= end2 && end1 >= start2;
+    
+    public static int GetDurationDays(DateTime start, DateTime? end)
+        => end.HasValue ? (int)(end.Value - start).TotalDays : 0;
+}
+
+// DutyUtility
+public static class DutyUtility
+{
+    public static string GetDutyStatus(AstronautDuty duty)
+        => duty.DutyEndDate == null ? "Active" : 
+           duty.DutyEndDate > DateTime.Now ? "Active" : "Completed";
+    
+    public static List<AstronautDuty> GetActiveDuties(IEnumerable<AstronautDuty> duties)
+        => duties.Where(d => d.DutyEndDate == null || d.DutyEndDate > DateTime.Now).ToList();
+}
+
+// Usage in queries/commands
+public class GetActiveDutiesForPersonHandler : IRequestHandler<GetActiveDutiesForPerson, List<AstronautDuty>>
+{
+    public async Task<List<AstronautDuty>> Handle(GetActiveDutiesForPerson request, CancellationToken cancellationToken)
+    {
+        var allDuties = await _context.AstronautDuties
+            .Where(d => d.PersonId == request.PersonId)
+            .ToListAsync(cancellationToken);
+        
+        return DutyUtility.GetActiveDuties(allDuties);
+    }
+}
+```
+
+**Implementation Strategy**
+
+1. **Phase 1**: Identify high-complexity business rules in current handlers
+2. **Phase 2**: Extract rules into dedicated `Rules/` folder with unit tests
+3. **Phase 3**: Create utility classes in `Utilities/` folder for common operations
+4. **Phase 4**: Refactor handlers to use rules engine and utilities
+5. **Phase 5**: Update tests to validate rules independently
+
+**Benefits**:
+- ✅ **Testability**: Rules can be unit tested without database mocking
+- ✅ **Reusability**: Same rules applied across multiple commands/queries
+- ✅ **Maintainability**: Business logic in one place, easy to audit and update
+- ✅ **SOLID Principles**: Single Responsibility (handler vs rule), Open/Closed (add new rules without modifying handler)
+- ✅ **Auditability**: Track which rules apply to which operations
+- ✅ **Performance**: Rules can be optimized independently
+- ✅ **Test Coverage**: Easier to achieve >90% coverage on business logic
+
+**SOLID Principles Alignment**:
+| Principle | Implementation |
+|---|---|
+| **S**ingle Responsibility | Each rule validates one concern; handlers only orchestrate |
+| **O**pen/Closed | Add new rules without modifying existing rules or handlers |
+| **L**iskov Substitution | All `IBusinessRule` implementations are substitutable |
+| **I**nterface Segregation | Small focused interfaces (`IBusinessRule`, `IBusinessRulesValidator`) |
+| **D**ependency Inversion | Handlers depend on abstractions (interfaces), not concrete rules |
+
+**Tools & Libraries**:
+- **FluentValidation**: Alternative approach for declarative validation
+- **Ardalis.GuardClauses**: Guard clauses library for common validation patterns
+- **AutoFixture**: Property-based testing for rules
+
+---
+
 ## Cost Optimization
 
-### 14. Right-Sizing & Reserved Capacity
+### 16. Right-Sizing & Reserved Capacity
 
 **Recommendation**: Analyze usage patterns and optimize costs.
 
@@ -747,7 +1406,7 @@ npm audit
 
 ---
 
-### 15. Multi-Region Deployment for High Availability
+### 17. Multi-Region Deployment for High Availability
 
 **Current State**: Single region deployment (us-gov-west-1).
 
