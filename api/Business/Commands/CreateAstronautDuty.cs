@@ -130,6 +130,10 @@ namespace StargateAPI.Business.Commands
 
             if (currentDuty != null)
             {
+                if (dutyStartDate <= currentDuty.DutyStartDate)
+                {
+                    throw new InvalidOperationException("The new duty start date must be after the current open duty's start date.");
+                }
                 currentDuty.DutyEndDate = dutyStartDate.AddDays(-1);
                 _context.AstronautDuties.Update(currentDuty);
             }
